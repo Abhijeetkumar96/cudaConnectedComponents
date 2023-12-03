@@ -4,7 +4,7 @@
 This repository contains a CUDA implementation of the connected components finding algorithm as described in the paper: "Fast GPU Algorithms for Graph Connectivity" by Jyothish Soman, K. Kothapalli, and P. J. Narayanan, presented at the Large Scale Parallel Processing Workshop in IPDPS, 2010.
 
 ## Original Work
-The original implementation by the authors can be found at: GpuConnectedComponents on GitHub.
+The original implementation by the authors can be found at: https://github.com/jyosoman/GpuConnectedComponents
 
 ## Installation
 ```shell
