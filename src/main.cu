@@ -1,11 +1,20 @@
 #include <set>
 #include <vector>
+#include <string>
 #include <chrono>
 #include <fstream>
 #include <sstream>
 #include <iostream>
 #include <algorithm>
 #include <cuda_runtime.h>
+
+// Function to check CUDA errors
+void checkCudaError(cudaError_t err, const std::string& msg) {
+    if (err != cudaSuccess) {
+        std::cerr << "CUDA Error: " << msg << " - " << cudaGetErrorString(err) << std::endl;
+        exit(EXIT_FAILURE);
+    }
+}
 
 class timer {
 	private:
@@ -93,22 +102,25 @@ void connected_comp(long numEdges, int* u_arr, int* v_arr, int numVert) {
 
 	std::vector<int> host_rep(numVert);
 	timer t1;
-	cudaFree(0);
+	checkCudaError(cudaFree(0), "Unable to setup device");
 	cudaDeviceProp prop;
-    cudaGetDeviceProperties(&prop, 1);
 
+    checkCudaError(cudaGetDeviceProperties(&prop, 1), "Unable to get deviceProp");
     const long numThreads = prop.maxThreadsPerBlock;
     int numBlocks = (numVert + numThreads - 1) / numThreads;
 
 	t1.stop("Initial Setup");
 	timer module_timer_t2;
 	int* d_flag;
-	cudaMalloc(&d_flag, sizeof(int));
+	checkCudaError(cudaMalloc(&d_flag, sizeof(int)), "Unable to allocate flag value");
 	auto start = std::chrono::high_resolution_clock::now();
 	int* d_rep;
-	cudaMalloc(&d_rep, numVert*sizeof(int));
+	checkCudaError(cudaMalloc(&d_rep, numVert*sizeof(int)), "Unable to allocate rep array");
 
 	initialise<<<numBlocks, numThreads>>>(d_rep, numVert);
+	cudaError_t err = cudaGetLastError();
+	checkCudaError(err, "Error in launching initialise kernel");
+
 	int flag = 1;
 	int iteration = 0;
 
@@ -118,9 +130,11 @@ void connected_comp(long numEdges, int* u_arr, int* v_arr, int numVert) {
 	while(flag) {
 		flag = 0;
 		iteration++;
-		cudaMemcpy(d_flag, &flag, sizeof(int),cudaMemcpyHostToDevice);
+		checkCudaError(cudaMemcpy(d_flag, &flag, sizeof(int),cudaMemcpyHostToDevice), "Unable to copy the flag to device");
 
 		hooking<<<numBlocks_hooking, numThreads>>> (numEdges, u_arr, v_arr, d_rep, d_flag, iteration);
+		err = cudaGetLastError();
+		checkCudaError(err, "Error in launching hooking kernel");
 		
 		#ifdef DEBUG
 			cudaMemcpy(host_rep.data(), d_rep, numVert * sizeof(int), cudaMemcpyDeviceToHost);
@@ -133,39 +147,23 @@ void connected_comp(long numEdges, int* u_arr, int* v_arr, int numVert) {
 			std::cout << std::endl;
 		#endif
 
-		for(int i = 0; i < std::ceil(std::log2(numVert)); ++i)
+		for(int i = 0; i < std::ceil(std::log2(numVert)); ++i) {
 			short_cutting<<<numBlocks_updating_parent, numThreads>>> (numVert, d_rep);
+			err = cudaGetLastError();
+			checkCudaError(err, "Error in launching short_cutting kernel");
+		}
 
-		cudaMemcpy(&flag, d_flag, sizeof(int), cudaMemcpyDeviceToHost);
-		// std::cout <<"Flag = " << flag << std::endl;
+		checkCudaError(cudaMemcpy(&flag, d_flag, sizeof(int), cudaMemcpyDeviceToHost), "Unable to copy back flag to host");
 	}
 	auto end = std::chrono::high_resolution_clock::now();
 	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
     
     std::cout <<"cc took " << duration << " ms." << std::endl;
-	// module_timer_t2.stop("connected_comp");
 
-	cudaMemcpy(host_rep.data(), d_rep, numVert * sizeof(int), cudaMemcpyDeviceToHost);
+	checkCudaError(cudaMemcpy(host_rep.data(), d_rep, numVert * sizeof(int), cudaMemcpyDeviceToHost), "Unable to copy back rep array");
 	std::set<int> num_comp(host_rep.begin(), host_rep.end());
 
 	std::cout <<"numComp = " << num_comp.size() << std::endl;
-}
-
-// Function to display the progress bar
-void displayProgressBar(int totalBatches, int completedBatches) {
-    const int barWidth = 50; // Width of the progress bar
-
-    float progress = (float)completedBatches / totalBatches;
-    int pos = barWidth * progress;
-
-    std::cout << "Progress: [";
-    for (int i = 0; i < barWidth; ++i) {
-        if (i < pos) std::cout << "=";
-        else if (i == pos) std::cout << ">";
-        else std::cout << " ";
-    }
-    std::cout << "] " << int(progress * 100.0) << " %\r";
-    std::cout.flush();
 }
 
 std::string get_file_extension(const std::string& filename) {
@@ -177,17 +175,16 @@ std::string get_file_extension(const std::string& filename) {
     return fileExtension;
 }
 
-
 void read_edges(const std::string& filename, std::vector<int>& u_arr, std::vector<int>& v_arr, int& numVert) {
 	std::ifstream inputFile(filename);
 	if(!inputFile) {
 		std::cerr <<"Unable to open file for reading." << std::endl;
 		return;
 	}
-	int numEdges;
+	long numEdges;
 	int u, v;
 	inputFile >> numVert >> numEdges;
-	for(int i = 0; i < numEdges; ++i) {
+	for(long i = 0; i < numEdges; ++i) {
 		inputFile >> u >> v;
 		u_arr.push_back(u);
 		v_arr.push_back(v);
@@ -288,14 +285,6 @@ void read_graph(const std::string& filename, std::vector<int>& u_arr, std::vecto
 		std::cerr <<"Unsupported file format." << std::endl;
 }
 
-// Function to check CUDA errors
-void checkCudaError(cudaError_t err, const char *msg) {
-    if (err != cudaSuccess) {
-        std::cerr << "CUDA Error: " << msg << " - " << cudaGetErrorString(err) << std::endl;
-        exit(EXIT_FAILURE);
-    }
-}
-
 int main(int argc, char* argv[]) {
 	std::ios_base::sync_with_stdio(false);
 	if(argc < 2) {
@@ -315,11 +304,11 @@ int main(int argc, char* argv[]) {
 
 	int *d_uArr, *d_vArr;
 	
-	cudaMalloc(&d_uArr, size);
-	cudaMalloc(&d_vArr, size);
+	checkCudaError(cudaMalloc(&d_uArr, size), "Unable to allocate u_arr ");
+	checkCudaError(cudaMalloc(&d_vArr, size), "Unable to allocate v_arr ");
 
-	cudaMemcpy(d_uArr, u_arr.data(), size, cudaMemcpyHostToDevice);
-	cudaMemcpy(d_vArr, v_arr.data(), size, cudaMemcpyHostToDevice);
+	checkCudaError(cudaMemcpy(d_uArr, u_arr.data(), size, cudaMemcpyHostToDevice), "Unable to copy u_arr to device");
+	checkCudaError(cudaMemcpy(d_vArr, v_arr.data(), size, cudaMemcpyHostToDevice), "Unable to copy v_arr to device");
 	
 	long numEdges = u_arr.size();
 	connected_comp(numEdges, d_uArr, d_vArr, numVert);
