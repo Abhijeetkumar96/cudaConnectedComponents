@@ -66,7 +66,7 @@ void short_cutting(int n, int* d_parent) {
 void connected_comp(long numEdges, int* u_arr, int* v_arr, int numVert) {
 
 	std::vector<int> host_rep(numVert);
-	timer t1;
+
 	checkCudaError(cudaFree(0), "Unable to setup device");
 	cudaDeviceProp prop;
 
@@ -74,8 +74,6 @@ void connected_comp(long numEdges, int* u_arr, int* v_arr, int numVert) {
     const long numThreads = prop.maxThreadsPerBlock;
     int numBlocks = (numVert + numThreads - 1) / numThreads;
 
-	t1.stop("Initial Setup");
-	timer module_timer_t2;
 	int* d_flag;
 	checkCudaError(cudaMalloc(&d_flag, sizeof(int)), "Unable to allocate flag value");
 	auto start = std::chrono::high_resolution_clock::now();

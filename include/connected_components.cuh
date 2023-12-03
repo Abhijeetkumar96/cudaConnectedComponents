@@ -18,11 +18,18 @@
  */
 
  #include <string>
+ #include <iostream>
+ #include <cuda_runtime.h>
 
 #ifndef CONNECTED_COMPONENTS_H
 #define CONNECTED_COMPONENTS_H
 
-void checkCudaError(cudaError_t err, const std::string& msg);
+inline void checkCudaError(cudaError_t err, const std::string& msg) {
+	if (err != cudaSuccess) {
+        std::cerr << "CUDA Error: " << msg << " - " << cudaGetErrorString(err) << std::endl;
+        exit(EXIT_FAILURE);
+    }
+}
 void connected_comp(long numEdges, int* d_uArr, int* d_vArr, int numVert);
 
 #endif //CONNECTED_COMPONENTS_H
