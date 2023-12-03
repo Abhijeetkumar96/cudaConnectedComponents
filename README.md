@@ -9,18 +9,18 @@ The original implementation by the authors can be found at: GpuConnectedComponen
 ## Installation
 ```shell
     git clone https://github.com/Abhijeetkumar96/cudaConnectedComponents.git
-    cd cc
+    cd cudaConnectedComponents
     make
 ```
 
 ## Usage
 To run the CUDA Connected Components Finder as a stand-alone module:
 ```shell
-    ./cc <filepath>
+    ./cc.e <filepath>
 ```
 To integrate this module into your own project:
 ```cpp
-    #include "connected_components"
+    #include "connected_components.cuh"
 ```
 - Headers are located in include/ directory, with sources in src/.
 Header files of all the above contain an explanation of input parameters along with a simple input and output.
